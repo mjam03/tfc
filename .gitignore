@@ -1,0 +1,27 @@
+# Terraform state contains the admin password and storage keys in plaintext
+*.tfstate
+*.tfstate.*
+.terraform/
+terraform.tfvars
+crash.log
+
+# Probe output may contain session cookies
+probe_out/
+*.probe.txt
+
+.venv/
+.mypy_cache/
+__pycache__/
+
+# Contains a read SAS for the screenshot container
+scripts/monitor.config.json
+
+# Secrets sourced into the shell (TF_VAR_*)
+.env
+
+# Saved plan files (may embed sensitive values)
+tfplan
+*.tfplan
+
+# macOS
+.DS_Store

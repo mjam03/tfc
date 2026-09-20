@@ -1,0 +1,16 @@
+# cp to terraform.tfvars and edit. Non-secret config only.
+# my_ip and admin_password are NOT here — they come from ../.env (TF_VAR_*).
+# Workflow:  cp ../.env.example ../.env  (fill in)  ->  source ../.env  ->  terraform apply
+
+# --- single-VM test (the default) ---
+regions         = { uksouth = 1 }
+vm_count        = 1
+browsers_per_vm = 1
+
+# --- fleet: up to 50 VMs across regions you have BSv2 quota in ---
+# regions = {
+#   uksouth    = 1
+#   ukwest     = 2
+#   westeurope = 3
+# }
+# vm_count = 45     # or 50 if uksouth quota is raised to 40 vCPU
