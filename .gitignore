@@ -25,3 +25,6 @@ tfplan
 
 # macOS
 .DS_Store
+
+# ISP proxy endpoint list (private)
+terraform/proxies.txt

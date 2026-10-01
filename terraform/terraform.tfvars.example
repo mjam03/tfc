@@ -14,3 +14,7 @@ browsers_per_vm = 1
 #   westeurope = 3
 # }
 # vm_count = 45     # or 50 if uksouth quota is raised to 40 vCPU
+
+# Extra source IPs allowed to RDP, on top of my_ip (from .env). Pre-authorise
+# your other locations so you're not locked out away from home.
+# extra_rdp_ips = ["203.0.113.5/32", "198.51.100.9/32"]

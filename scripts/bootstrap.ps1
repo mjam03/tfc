@@ -19,7 +19,10 @@ param(
     [int]   $ControlPollSeconds = 5,
     [int]   $MaxWidth           = 1280,
     [int]   $AutoLogon          = 1,
-    [string]$AdminPasswordB64   = ""
+    [string]$AdminPasswordB64   = "",
+    [string]$ProxyEndpoint      = "",
+    [string]$ProxyUserB64       = "",
+    [string]$ProxyPassB64       = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -68,6 +71,53 @@ try {
         } else {
             Write-Warning "$s was not delivered by the extension"
         }
+    }
+
+    # -----------------------------------------------------------------------
+    # Proxy (ISP static residential). Only the queue browser is routed through
+    # the proxy -- the screenshot/upload/control traffic stays direct to Azure,
+    # so it doesn't consume the paid proxy and the dashboard is unaffected.
+    #
+    # Chrome's --proxy-server flag can't carry credentials (it would pop an auth
+    # dialog), so a tiny MV3 extension answers the proxy auth challenge. The
+    # endpoint (host:port) is written to proxy_endpoint.txt; launch.ps1 reads
+    # both and adds the flags. No endpoint/creds => no proxy, VMs use their
+    # Azure IP exactly as before.
+    # -----------------------------------------------------------------------
+    $extDir = "$AutoDir\proxyext"
+    Remove-Item $extDir -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item "$AutoDir\proxy_endpoint.txt" -Force -ErrorAction SilentlyContinue
+    if ($ProxyEndpoint -and $ProxyUserB64 -and $ProxyPassB64) {
+        $proxyUser = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($ProxyUserB64))
+        $proxyPass = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($ProxyPassB64))
+        New-Item -ItemType Directory -Force -Path $extDir | Out-Null
+
+        @{
+            name             = "twitchy-proxy-auth"
+            version          = "1.0"
+            manifest_version = 3
+            permissions      = @("webRequest", "webRequestAuthProvider")
+            host_permissions = @("<all_urls>")
+            background       = @{ service_worker = "background.js" }
+        } | ConvertTo-Json -Depth 5 | Set-Content -Path "$extDir\manifest.json" -Encoding UTF8
+
+        # ConvertTo-Json quotes + escapes the credential strings safely for JS.
+        $userJs = $proxyUser | ConvertTo-Json
+        $passJs = $proxyPass | ConvertTo-Json
+        @"
+const USER = $userJs;
+const PASS = $passJs;
+chrome.webRequest.onAuthRequired.addListener(
+  function (details) { return { authCredentials: { username: USER, password: PASS } }; },
+  { urls: ["<all_urls>"] },
+  ["blocking"]
+);
+"@ | Set-Content -Path "$extDir\background.js" -Encoding UTF8
+
+        Set-Content -Path "$AutoDir\proxy_endpoint.txt" -Value $ProxyEndpoint -Encoding ASCII
+        Write-Output "Proxy configured: $ProxyEndpoint (user $proxyUser)"
+    } else {
+        Write-Output "No proxy configured -- browser uses the VM's Azure IP."
     }
 
     # -----------------------------------------------------------------------

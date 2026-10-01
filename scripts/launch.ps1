@@ -49,6 +49,24 @@ $SWP_SHOWWINDOW = 0x0040
 # off" bar that a reboot-killed session would otherwise show.
 $chromeArgs = @("--new-window", "--start-maximized", "--hide-crash-restore-bubble",
     "--no-first-run", "--no-default-browser-check")
+
+# Route this browser through the ISP proxy when bootstrap configured one. Only
+# Chrome is proxied; capture/upload/control keep talking to Azure directly.
+# --test-type suppresses the "developer mode extension" / unsupported-flag
+# bubbles that --load-extension would otherwise pop over the page.
+# Route this browser through the ISP proxy when bootstrap configured one. Auth
+# is by IP whitelist (the VM's Azure egress IP is allow-listed in Oxylabs), so
+# no username/password changes hands and Chrome never shows a proxy sign-in
+# dialog -- the flaky part of browser-side proxy auth is simply removed.
+$proxyEndpointFile = "C:\automation\proxy_endpoint.txt"
+if (Test-Path $proxyEndpointFile) {
+    $proxyEndpoint = (Get-Content $proxyEndpointFile -Raw).Trim()
+    if ($proxyEndpoint) {
+        $chromeArgs += "--proxy-server=http://$proxyEndpoint"
+        $chromeArgs += "--proxy-bypass-list=localhost;127.0.0.1;169.254.169.254"
+        Write-Output "Proxy enabled for Chrome (IP-whitelist auth): $proxyEndpoint"
+    }
+}
 # Chrome only. If Count > 1 these become N Chrome windows; the fleet default is
 # 1 maximised Chrome per VM.
 $browsers = @(
@@ -114,6 +132,18 @@ try {
             Start-Sleep -Milliseconds 300
             [void][Win32Window]::SetForegroundWindow($hwnd)
             Write-Output "$($b.Name) maximised, Start dismissed"
+
+            # The queue's JS waiting room sometimes paints blank on the very
+            # first load after boot; a single reload a few seconds in makes it
+            # render (same as refreshing by hand). This is a plain F5 keystroke
+            # via WScript.Shell -- OS-level, no WebDriver/automation, nothing for
+            # Defender to flag (same mechanism as the ESC above).
+            Start-Sleep -Seconds 6
+            try {
+                [void][Win32Window]::SetForegroundWindow($hwnd)
+                (New-Object -ComObject WScript.Shell).SendKeys('{F5}')
+                Write-Output "$($b.Name) reloaded to force a clean render"
+            } catch { Write-Output "reload keystroke failed: $($_.Exception.Message)" }
         } else {
             # Tiled: restore first (a maximised window ignores SetWindowPos sizing).
             [void][Win32Window]::ShowWindow($hwnd, $SW_RESTORE)

@@ -11,10 +11,30 @@ locals {
       ) => {
       region = local.region_names[i % length(local.region_names)]
       idx    = floor(i / length(local.region_names))
+      i      = i
     }
   }
 
   scripts = ["bootstrap.ps1", "launch.ps1", "capture.ps1", "upload.ps1", "keepalive.ps1", "control.ps1"]
+
+  # Source IPs allowed to RDP: your primary (my_ip, from .env) plus any extra
+  # locations. Deduplicated so overlaps are harmless.
+  rdp_allow_ips = distinct(concat([var.my_ip], var.extra_rdp_ips))
+
+  # ISP static proxies: one `host:port` per line in proxies.txt (gitignored),
+  # one endpoint per VM. Assigned by VM index so each VM gets its own dedicated
+  # residential IP. element() cycles if the list is short, but for ISP you want
+  # at least vm_count lines (see the proxy_endpoints output for a mismatch flag).
+  proxy_raw = try(trimspace(file("${path.module}/${var.proxy_file}")), "")
+  proxy_list = local.proxy_raw == "" ? [] : [
+    for l in split("\n", local.proxy_raw) :
+    trimspace(l) if trimspace(l) != "" && !startswith(trimspace(l), "#")
+  ]
+  proxy_enabled = var.use_proxy && var.proxy_user != "" && length(local.proxy_list) > 0
+  vm_proxy = {
+    for k, v in local.vm_instances :
+    k => local.proxy_enabled ? element(local.proxy_list, v.i) : ""
+  }
 }
 
 resource "random_string" "suffix" {
@@ -188,14 +208,17 @@ resource "azurerm_network_security_group" "nsg" {
   resource_group_name = azurerm_resource_group.rg[each.key].name
 
   security_rule {
-    name                       = "RDP"
-    priority                   = 1000
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "3389"
-    source_address_prefix      = var.my_ip
+    name                   = "RDP"
+    priority               = 1000
+    direction              = "Inbound"
+    access                 = "Allow"
+    protocol               = "Tcp"
+    source_port_range      = "*"
+    destination_port_range = "3389"
+    # Every location you might RDP from: my_ip (home, from .env) plus any extra
+    # locations in extra_rdp_ips. Changing this is an in-place NSG update (no VM
+    # reboot), so you can add a new location and re-apply in seconds.
+    source_address_prefixes    = local.rdp_allow_ips
     destination_address_prefix = "*"
   }
 }
@@ -292,6 +315,9 @@ resource "azurerm_virtual_machine_extension" "bootstrap" {
       "-AutoLogon ${var.auto_logon ? 1 : 0}",
       "-AdminPasswordB64 \"${base64encode(var.admin_password)}\"",
       "-MaxWidth ${var.screenshot_max_width}",
+      "-ProxyEndpoint \"${local.vm_proxy[each.key]}\"",
+      "-ProxyUserB64 \"${base64encode(var.proxy_user)}\"",
+      "-ProxyPassB64 \"${base64encode(var.proxy_password)}\"",
     ])
 
     storageAccountName = azurerm_storage_account.shared.name

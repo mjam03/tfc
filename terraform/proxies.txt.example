@@ -1,0 +1,8 @@
+# One Oxylabs ISP proxy endpoint per line: host:port  (one per VM).
+# Copy to proxies.txt (gitignored) and paste your endpoints from the Oxylabs
+# dashboard. Lines starting with # and blank lines are ignored.
+#
+# Example (your real host/ports will differ):
+# isp.oxylabs.io:8001
+# isp.oxylabs.io:8002
+# isp.oxylabs.io:8003

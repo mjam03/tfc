@@ -33,3 +33,17 @@ output "monitor_config" {
     browser_count = var.browsers_per_vm
   })
 }
+
+output "proxy_status" {
+  description = "ISP proxy wiring summary. Ensure endpoints >= vm_count so each VM gets a distinct IP."
+  value = local.proxy_enabled ? format(
+    "ENABLED: %d endpoints for %d VMs%s",
+    length(local.proxy_list), length(local.vm_instances),
+    length(local.proxy_list) < length(local.vm_instances) ? " -- WARNING: fewer endpoints than VMs; some IPs will be reused" : " (one IP per VM)"
+  ) : "DISABLED (no proxy_user or empty proxies.txt) -- VMs use their Azure IP"
+}
+
+output "rdp_allowed_ips" {
+  description = "Every source IP currently allowed to RDP (my_ip + extra_rdp_ips)."
+  value       = local.rdp_allow_ips
+}

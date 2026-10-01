@@ -127,3 +127,40 @@ variable "control_poll_seconds" {
   type        = number
   default     = 5
 }
+
+variable "proxy_file" {
+  description = "File (relative to terraform/) listing one ISP proxy 'host:port' per line, one per VM. Gitignored. Empty/missing = no proxy (VMs use their Azure IP)."
+  type        = string
+  default     = "proxies.txt"
+}
+
+variable "proxy_user" {
+  description = "Oxylabs ISP proxy sub-user. Set via TF_VAR_proxy_user in .env. Empty disables the proxy."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "proxy_password" {
+  description = "Oxylabs ISP proxy password. Set via TF_VAR_proxy_password in .env."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "extra_rdp_ips" {
+  description = "Additional source IPs (CIDR, e.g. 203.0.113.5/32) allowed to RDP, on top of my_ip. Pre-authorise your other locations (office, holiday) here so you don't get locked out away from home."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = alltrue([for ip in var.extra_rdp_ips : can(cidrnetmask(ip))])
+    error_message = "Each extra_rdp_ips entry must be CIDR, e.g. 203.0.113.5/32."
+  }
+}
+
+variable "use_proxy" {
+  description = "Master switch for the ISP proxy. false = VMs connect directly from their Azure IP (proxy creds/list are kept but ignored)."
+  type        = bool
+  default     = true
+}
